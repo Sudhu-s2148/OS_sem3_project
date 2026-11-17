@@ -27,6 +27,6 @@ typedef struct {
     int active_producers;
 } SharedData;
 
-void test_logger();
+void test_ipc();
 
 #endif

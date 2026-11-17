@@ -1,4 +1,4 @@
-#include "logger.h"
+#include "ipc.h"
 
 void run_producer_process(int id, SharedData* shared_data, sem_t* sem_mutex, sem_t* sem_empty, sem_t* sem_full) 
 {
@@ -82,7 +82,7 @@ void run_logger_process(SharedData* shared_data, sem_t* sem_mutex, sem_t* sem_em
     exit(0);
 }
 
-void test_logger() 
+void test_ipc() 
 {
     printf("Starting concurrent logger\n");
 
@@ -94,7 +94,7 @@ void test_logger()
 
     //create shared memory
     int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666); //create new shared memory object (0666 is read/write access to all users)
-    ftruncate(shm_fd, sizeof(SharedData)); ////truncate to size of shared data struct
+    ftruncate(shm_fd, sizeof(SharedData)); //truncate to size of shared data struct
     
     //map it to the program's memory space
     SharedData* shared_data = mmap(0, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);

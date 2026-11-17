@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <sys/time.h>
 
-extern char log_queue[5][256]; //queue of log messages
+extern char log_queue[32][4096]; //queue of log messages
 extern int q_count; 
 extern int q_head;
 extern int q_tail;

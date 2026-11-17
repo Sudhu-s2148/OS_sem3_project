@@ -4,8 +4,8 @@ void execute_worker(Job* job, int log)
 {
     struct rlimit rl;
     //set cpu time limit as 2 * burst time
-    rl.rlim_cur = 2 * job->burst_time;
-    rl.rlim_max = 4 * job->burst_time;
+    rl.rlim_cur = 8;
+    rl.rlim_max = 10;
 
     //enforce cpu time limit
     if (setrlimit(RLIMIT_CPU, &rl) != 0) 
@@ -17,18 +17,12 @@ void execute_worker(Job* job, int log)
         printf("Worker pid: %d | job %d starting | time left: %d\n", getpid(), job->job_id, job->burst_time);
 
     //simulate failure
-    if (job->job_id == 2)
+    /* if (job->job_id == 2)
     {
-        int a = 1/0;
-    }
-    else if (job->job_id == 3)
-    {
-        while(1)
-        {
-        
-        }
-    }
-    else 
+        //int a = 1/0;
+    } 
+
+    else  */
     {
         for(int i = 0; i < job->burst_time; i++) 
         {
@@ -90,38 +84,93 @@ void dispatch_job_fcfs(Job* job, int log)
         {
             job->s = STATUS_FAILED;
             if (log == 1)
+            {
                 sprintf(msg, "job %d failed with signal: %d\n\n", job->job_id, WTERMSIG(status));
+                push_log(msg);
+            }
             else 
                 printf("job %d failed with signal: %d\n", job->job_id, WTERMSIG(status)); 
         }
-
-        push_log(msg);
     }
+}
+
+void run_fcfs(Job* jobs, int n, int log)
+{   
+    sched_init();
+
+    char msg[256];
+    if (log == 1)
+    {
+        push_log("Starting FCFS\n");
+    }
+    else 
+    {
+        printf("Starting FCFS\n\n");
+    }
+    if (sched_enqueue_list(jobs, n) != 0) 
+    {
+        if (log == 1)
+        {
+            sprintf(msg, "[FCFS Scheduler] Failed to load jobs into the queue.\n");
+            push_log(msg);  
+            memset(msg, 0, sizeof(msg));
+        }
+        else 
+        {
+            fprintf(stderr, "[FCFS Scheduler] Failed to load jobs into the queue.\n");
+        }
+
+        exit(1);
+    }
+
+    while (sched_pending() > 0)
+    {
+        Job* curr_job = sched_dequeue();
+
+        if (curr_job != NULL)
+        {
+            dispatch_job_fcfs(curr_job, log);
+        }
+    }
+
+    ScheduleResult sr;
+    schedule_fcfs(jobs, n, &sr);
+    char schedule_result[2048];
+    print_schedule(&sr, schedule_result);
+
+
+    if (log == 1)
+    {
+        sprintf(msg, "[FCFS Scheduler] jobs completed\n");
+        push_log(msg);
+        memset(msg, 0, sizeof(msg));
+
+        push_log(schedule_result);
+    }
+    else 
+    {
+        printf("\n[FCFS Scheduler] jobs completed\n\n");
+        printf("%s", schedule_result);
+    }
+
 }
 
 void execute_worker_round_robin(Job* job) 
 {
     struct rlimit rl;
-    rl.rlim_cur = 4; 
-    rl.rlim_max = 6; 
+    rl.rlim_cur = 8; 
+    rl.rlim_max = 10; 
     
     if (setrlimit(RLIMIT_CPU, &rl) != 0) 
     {
         perror("Failed to set CPU limit");
     }
     //simulate failure on the 2nd time quantum of 2nd job
-    if (job->job_id == 2)
+    /* if (job->job_id == 2)
     {
         int a = 1/0;
     }
-    else if (job->job_id == 3) //simulate timeout
-    {
-        while(1)
-        {
-
-        }
-    }
-    else 
+    else */ 
     {
         for(int i = 0; i < job->remaining_time; i++) 
         {
@@ -162,6 +211,16 @@ Job* dequeue(Queue* rq)
 
 void run_round_robin(Job jobs[], int num_jobs, int quantum, int log) 
 {
+    int order[num_jobs];
+
+    sort_by_arrival(jobs, num_jobs, order);
+
+    Job rr_jobs[num_jobs];
+
+    for (int i = 0; i < num_jobs; i++)
+    {
+        rr_jobs[i] = jobs[order[i]];
+    }
 
     Queue* rq = create_ready_queue();
 
@@ -184,19 +243,19 @@ void run_round_robin(Job jobs[], int num_jobs, int quantum, int log)
     
 
     //enqueue any jobs that arrive initially
-    while(unarrived_idx < num_jobs && jobs[unarrived_idx].arrival_time <= current_time) 
+    while(unarrived_idx < num_jobs && rr_jobs[unarrived_idx].arrival_time <= current_time) 
     {
         if (log == 1)
         {
-            sprintf(msg, "[Time %d] Job %d arrived and joined the queue.\n", current_time, jobs[unarrived_idx].job_id);  
+            sprintf(msg, "[Time %d] Job %d arrived and joined the queue.\n", current_time, rr_jobs[unarrived_idx].job_id);  
             push_log(msg);
             memset(msg, 0, sizeof(msg));
         }
         else 
         {
-            printf("[Time %d] Job %d arrived and joined the queue.\n", current_time, jobs[unarrived_idx].job_id);
+            printf("[Time %d] Job %d arrived and joined the queue.\n", current_time, rr_jobs[unarrived_idx].job_id);
         }
-        enqueue(&jobs[unarrived_idx], rq);
+        enqueue(&rr_jobs[unarrived_idx], rq);
         unarrived_idx++;
     }
 
@@ -216,22 +275,22 @@ void run_round_robin(Job jobs[], int num_jobs, int quantum, int log)
             {
                 printf("[Time %d] CPU Idle. Fast forwarding to next arrival.\n", current_time);
             }
-            current_time = jobs[unarrived_idx].arrival_time;
+            current_time = rr_jobs[unarrived_idx].arrival_time;
             
             //job arrives
-            while(unarrived_idx < num_jobs && jobs[unarrived_idx].arrival_time <= current_time) 
+            while(unarrived_idx < num_jobs && rr_jobs[unarrived_idx].arrival_time <= current_time) 
             {
                 if (log == 1)
                 {
-                    sprintf(msg, "[Time %d] Job %d arrived and joined the queue.\n", current_time, jobs[unarrived_idx].job_id);  
+                    sprintf(msg, "[Time %d] Job %d arrived and joined the queue.\n", current_time, rr_jobs[unarrived_idx].job_id);  
                     push_log(msg);
                     memset(msg, 0, sizeof(msg));
                 }
                 else 
                 {
-                    printf("[Time %d] Job %d arrived and joined the queue.\n", current_time, jobs[unarrived_idx].job_id);
+                    printf("[Time %d] Job %d arrived and joined the queue.\n", current_time, rr_jobs[unarrived_idx].job_id);
                 }
-                enqueue(&jobs[unarrived_idx], rq);
+                enqueue(&rr_jobs[unarrived_idx], rq);
                 unarrived_idx++;
             }
         }
@@ -278,19 +337,19 @@ void run_round_robin(Job jobs[], int num_jobs, int quantum, int log)
             current_time++; 
             
             //tiebreak between job arriving exactly when new quantum starts, and job which was waiting (new arrival goes first)
-            while(unarrived_idx < num_jobs && jobs[unarrived_idx].arrival_time == current_time)     
+            while(unarrived_idx < num_jobs && rr_jobs[unarrived_idx].arrival_time == current_time)     
             {
                 if (log == 1)
                 {
-                    sprintf(msg, "[Time %d] Job %d arrived and joined the queue.\n", current_time, jobs[unarrived_idx].job_id);  
+                    sprintf(msg, "[Time %d] Job %d arrived and joined the queue.\n", current_time, rr_jobs[unarrived_idx].job_id);  
                     push_log(msg);
                     memset(msg, 0, sizeof(msg));
                 }
                 else 
                 {
-                    printf("[Time %d] Job %d arrived and joined the queue.\n", current_time, jobs[unarrived_idx].job_id);
+                    printf("[Time %d] Job %d arrived and joined the queue.\n", current_time, rr_jobs[unarrived_idx].job_id);
                 }
-                enqueue(&jobs[unarrived_idx], rq);
+                enqueue(&rr_jobs[unarrived_idx], rq);
                 unarrived_idx++;
             }
         }
@@ -366,13 +425,13 @@ void run_round_robin(Job jobs[], int num_jobs, int quantum, int log)
 
     if (log == 1)
     {
-        sprintf(msg, "All Jobs Completed (Total Time: %d)\n", current_time);  
+        sprintf(msg, "Jobs Completed (Total Time: %d)\n", current_time);  
         push_log(msg);
         memset(msg, 0, sizeof(msg));  
     }
     else 
     {
-        printf("All Jobs Completed (Total Time: %d)\n", current_time);
+        printf("Jobs Completed (Total Time: %d)\n", current_time);
     }
     
     float total_tat = 0;
@@ -380,34 +439,34 @@ void run_round_robin(Job jobs[], int num_jobs, int quantum, int log)
 
     if (log == 1)
     {
-        push_log("Scheduling Calculations (only completed jobs are tracker): \n");
+        push_log("Scheduling Calculations (only completed jobs are tracked): \n");
     }
     else 
     {
-        printf("\nScheduling Calculations (only completed jobs are tracker): \n");
+        printf("\nScheduling Calculations (only completed jobs are tracked): \n");
     }
 
     int completed_jobs = 0; //track only completed jobs
 
     for (int i = 0; i < num_jobs; i++) 
     {
-        if (jobs[i].s == STATUS_FAILED) 
+        if (rr_jobs[i].s == STATUS_FAILED) 
         {
             if (log == 1)
             {
-                sprintf(msg, "Job %d: FAILED, continuing\n", jobs[i].job_id);   
+                sprintf(msg, "Job %d: FAILED, continuing\n", rr_jobs[i].job_id);   
                 push_log(msg);
                 memset(msg, 0, sizeof(msg));
             }
             else 
             {
-                printf("Job %d: FAILED, continuing\n", jobs[i].job_id);
+                printf("Job %d: FAILED, continuing\n", rr_jobs[i].job_id);
             }
             continue;
         }
 
-        int tat = jobs[i].completion_time - jobs[i].arrival_time;
-        int wt = tat - jobs[i].burst_time; 
+        int tat = rr_jobs[i].completion_time - rr_jobs[i].arrival_time;
+        int wt = tat - rr_jobs[i].burst_time; 
 
         total_tat += tat;
         total_wt += wt;
@@ -415,13 +474,13 @@ void run_round_robin(Job jobs[], int num_jobs, int quantum, int log)
 
         if (log == 1)
         {
-            sprintf(msg, "Job %d: Turnaround Time = %d, Waiting Time = %d\n", jobs[i].job_id, tat, wt);  
+            sprintf(msg, "Job %d: Turnaround Time = %d, Waiting Time = %d\n", rr_jobs[i].job_id, tat, wt);  
             push_log(msg);
             memset(msg, 0, sizeof(msg));
         }
         else 
         {
-            printf("Job %d: Turnaround Time = %d, Waiting Time = %d\n", jobs[i].job_id, tat, wt);
+            printf("Job %d: Turnaround Time = %d, Waiting Time = %d\n", rr_jobs[i].job_id, tat, wt);
         }   
     }
 
@@ -443,4 +502,147 @@ void run_round_robin(Job jobs[], int num_jobs, int quantum, int log)
             printf("Average Waiting Time: %.2f\n", total_wt / completed_jobs);
         }
     }
+}
+
+//function to output order of jobs for priority queue
+void get_priority_order(const Job jobs[], int n, int order[]) 
+{
+    int finished[100] = {0}; 
+    int current_time = 0;
+    int done = 0;
+
+    while (done < n) 
+    {
+        int best = -1;
+        int earliest = -1;
+
+        for (int i = 0; i < n; i++) 
+        {
+            if (finished[i]) continue;
+            
+            //track the earliest arriving job in case the CPU is idle
+            if (earliest < 0 || jobs[i].arrival_time < jobs[earliest].arrival_time) 
+            {
+                earliest = i;
+            }
+            
+            //if the job has already arrived, check if its the best candidate
+            if (jobs[i].arrival_time <= current_time) 
+            {
+                if (best < 0) 
+                {
+                    best = i;
+                } 
+                else 
+                {
+                    //tiebreaker: high > medium > low
+                    if (jobs[i].p > jobs[best].p) 
+                    {
+                        best = i;
+                    } 
+                    else if (jobs[i].p == jobs[best].p) //tiebreaker 2: earlier arrival time
+                    {
+                        if (jobs[i].arrival_time < jobs[best].arrival_time) 
+                        {
+                            best = i;
+                        } 
+                        else if (jobs[i].arrival_time == jobs[best].arrival_time) //tiebreaker 3: lower job id
+                        {
+                            if (jobs[i].job_id < jobs[best].job_id) 
+                            {
+                                best = i;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        //if no jobs have arrived yet, fast forward time to the next arrival
+        if (best < 0) 
+        {
+            current_time = jobs[earliest].arrival_time;
+            continue;
+        }
+
+        //record the best job's index in the order array
+        order[done] = best;
+        
+        //mark the job as finished, advance time by that job's burst time
+        finished[best] = 1;
+        current_time += jobs[best].burst_time; 
+        done++;
+    }
+}
+
+void run_priority_queue(Job* jobs, int n, int log)
+{
+    if (log == 1)
+    {
+        push_log("[Priority Scheduler] Starting Priority Queue: ");
+    } 
+    else 
+    {
+        printf("\n[Priority Scheduler] Starting Prioriy Queue\n");
+    }
+    
+    int order[n];
+
+    get_priority_order(jobs, n, order);
+
+
+    for (int i = 0; i < n; i++)
+    {
+        dispatch_job_fcfs(&jobs[order[i]], log);
+    }
+
+    ScheduleResult sr;
+    schedule_priority(jobs, n, &sr);
+
+    char schedule_result[2048];
+    print_schedule(&sr, schedule_result);
+
+
+    if (log == 1)
+    {
+        push_log("[Priority Scheduler] jobs completed\n");
+        push_log(schedule_result);
+    }
+    else 
+    {
+        printf("\n[Priority Scheduler] jobs completed\n\n");
+        printf("%s", schedule_result);
+    }
+}
+
+void display_jobs(const Job* jobs, int n)
+{
+    printf("\n============================ CURRENT JOB LIST ============================\n");
+    printf("%-6s %-10s %-10s %-10s %-12s %-10s %-8s\n", 
+           "JobID", "Priority", "Arrival", "Burst", "Remaining", "Status", "PID");
+    printf("--------------------------------------------------------------------------\n");
+
+    for (int i = 0; i < n; i++) 
+    {
+        //priority enum - string
+        const char* prio_str = "LOW";
+        if (jobs[i].p == PRIORITY_HIGH) prio_str = "HIGH";
+        else if (jobs[i].p == PRIORITY_MEDIUM) prio_str = "MEDIUM";
+
+        // status enum - string
+        const char* stat_str = "WAITING";
+        if (jobs[i].s == STATUS_RUNNING) stat_str = "RUNNING";
+        else if (jobs[i].s == STATUS_DONE) stat_str = "DONE";
+        else if (jobs[i].s == STATUS_FAILED) stat_str = "FAILED";
+
+        printf("%-6d %-10s %-10d %-10d %-12d %-10s %-8d\n",
+               jobs[i].job_id, 
+               prio_str, 
+               jobs[i].arrival_time, 
+               jobs[i].burst_time, 
+               jobs[i].remaining_time, 
+               stat_str, 
+               jobs[i].pid);
+    }
+    printf("==========================================================================\n\n");
 }

@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-char log_queue[5][256];
+char log_queue[32][4096];
 int q_count = 0;
 int q_head = 0;
 int q_tail = 0;
@@ -40,6 +40,7 @@ void push_log(const char* message)
 //process to run on logger thread
 void* logger_thread(void* arg) 
 {
+    (void)arg; //silence compiler warning
     //get time to print to log
     struct timeval start_time, current_time;
     gettimeofday(&start_time, NULL);
