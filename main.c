@@ -15,6 +15,7 @@ int main(int argc, char *argv[])
     int run_rr = 0;
     int run_p = 0;
     int run_b = 0;
+    int run_ub = 0;
     int use_log = 0;
     int ipc = 0;
     int disp = 0;
@@ -25,6 +26,7 @@ int main(int argc, char *argv[])
         else if (strcmp(argv[i], "-rr") == 0) run_rr = 1;
         else if (strcmp(argv[i], "-prio") == 0) run_p = 1;
         else if (strcmp(argv[i], "-banker") == 0) run_b = 1;
+        else if (strcmp(argv[i], "-ubanker") == 0) run_ub = 1;
         else if (strcmp(argv[i], "-ipc") == 0) ipc = 1;
         else if (strcmp(argv[i], "-log") == 0) use_log = 1;
         else if (strcmp(argv[i], "-disp") == 0) disp = 1;
@@ -34,13 +36,14 @@ int main(int argc, char *argv[])
             run_rr = 1;
             run_p = 1;
             run_b = 1;
+            run_ub = 1;
             ipc = 1;
             disp = 1;   
         }
     }
 
     //if no algorithms were selected, show usage instructions and exit
-    if (run_f + run_rr + run_p + run_b + ipc + use_log + disp == 0) 
+    if (run_f + run_rr + run_p + run_b + ipc + use_log + disp  + run_ub == 0) 
     {
         printf("Usage: ./scheduler [-fcfs] [-rr] [-prio] [-banker] [-log] [-disp]\n");
         printf("Example: ./scheduler -fcfs -rr -log\n");
@@ -65,6 +68,19 @@ int main(int argc, char *argv[])
         { .job_id = 4, .arrival_time = 6, .burst_time = 2,  .remaining_time = 2,  .p = PRIORITY_HIGH,   
           .max_claim = {4, 2, 2}, .allocated = {0, 0, 2}, .pid = 0, .s = STATUS_WAITING }
     };
+
+    Job unsafe_jobs[3] = {
+        { .job_id = 1, .arrival_time = 0, .burst_time = 3, .remaining_time = 3, .p = PRIORITY_HIGH,   
+          .max_claim = {6, 8, 8}, .allocated = {4, 6, 6}, .pid = 0, .s = STATUS_WAITING },
+        
+        { .job_id = 2, .arrival_time = 2, .burst_time = 4, .remaining_time = 4, .p = PRIORITY_MEDIUM, 
+          .max_claim = {8, 7, 7}, .allocated = {4, 5, 5}, .pid = 0, .s = STATUS_WAITING },
+        
+        { .job_id = 3, .arrival_time = 4, .burst_time = 5, .remaining_time = 5, .p = PRIORITY_LOW,    
+          .max_claim = {4, 3, 5}, .allocated = {1, 0, 3}, .pid = 0, .s = STATUS_WAITING }
+    };
+
+
 
     if (disp)
     {
@@ -101,6 +117,31 @@ int main(int argc, char *argv[])
         {
             printf("Banker's check failed to execute.\n");
         }
+    }
+
+    if (run_ub)
+    {
+        BankerResult b_result;
+        
+        //run the banker's algorithm
+        if (banker_check(unsafe_jobs, 3, &b_result) == 0) 
+        {
+            char banker_buffer[2048];
+            banker_print_buffer(&b_result, banker_buffer);
+
+            if (use_log) 
+            {
+                push_log(banker_buffer);
+            } 
+            else 
+            {
+                printf("%s\n", banker_buffer);
+            }
+        }
+        else 
+        {
+            printf("Banker's check failed to execute.\n");
+        }    
     }
 
     //execute Selected Schedulers
